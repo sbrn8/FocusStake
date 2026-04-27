@@ -1,65 +1,153 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { parseEther } from "viem";
+import { useAccount, useConnect, useDisconnect, useWriteContract } from "wagmi";
+import { focusStakeAbi } from "@/lib/focusStakeAbi";
+
+const contractAddress = process.env.NEXT_PUBLIC_FOCUSSTAKE_CONTRACT_ADDRESS as
+  | `0x${string}`
+  | undefined;
 
 export default function Home() {
+  const { address, isConnected } = useAccount();
+  const { connect, connectors, isPending: isConnecting } = useConnect();
+  const { disconnect } = useDisconnect();
+  const { writeContractAsync, isPending } = useWriteContract();
+
+  const [title, setTitle] = useState("");
+  const [stakeEth, setStakeEth] = useState("0.02");
+  const [allowSlip, setAllowSlip] = useState(true);
+  const [durationDays, setDurationDays] = useState(7);
+  const [status, setStatus] = useState("");
+
+  const createCommitment = async () => {
+    if (!contractAddress) {
+      setStatus("Set NEXT_PUBLIC_FOCUSSTAKE_CONTRACT_ADDRESS in your .env.local");
+      return;
+    }
+
+    if (!title.trim()) {
+      setStatus("Please add a commitment title.");
+      return;
+    }
+
+    try {
+      const deadline = Math.floor(Date.now() / 1000) + durationDays * 24 * 60 * 60;
+
+      const tx = await writeContractAsync({
+        abi: focusStakeAbi,
+        address: contractAddress,
+        functionName: "createCommitment",
+        args: [title.trim(), BigInt(deadline), allowSlip],
+        value: parseEther(stakeEth || "0"),
+      });
+
+      setStatus(`Commitment submitted. Tx: ${tx.slice(0, 10)}...`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Transaction failed.";
+      setStatus(message);
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-6 py-10">
+      <motion.section
+        className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <h1 className="text-3xl font-semibold tracking-tight">FocusStake</h1>
+        <p className="mt-3 text-zinc-600 dark:text-zinc-300">
+          Stake ETH on personal commitments. Success unlocks recovery, and slips
+          pause progress with compassion instead of reset.
+        </p>
+
+        <div className="mt-6">
+          {isConnected ? (
+            <div className="flex items-center gap-3">
+              <span className="rounded-md bg-zinc-100 px-3 py-2 text-sm dark:bg-zinc-800">
+                {address?.slice(0, 6)}...{address?.slice(-4)}
+              </span>
+              <button
+                type="button"
+                onClick={() => disconnect()}
+                className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700"
+              >
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={isConnecting || connectors.length === 0}
+              onClick={() => connect({ connector: connectors[0] })}
+              className="rounded-lg bg-black px-4 py-2 text-white disabled:opacity-40 dark:bg-white dark:text-black"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              {isConnecting ? "Connecting..." : "Connect Browser Wallet"}
+            </button>
+          )}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+
+        <div className="mt-8 grid gap-4">
+          <label className="grid gap-2 text-sm">
+            Commitment title
+            <input
+              className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+              placeholder="30 days sober"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          </label>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="grid gap-2 text-sm">
+              Stake (ETH)
+              <input
+                className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+                value={stakeEth}
+                onChange={(event) => setStakeEth(event.target.value)}
+              />
+            </label>
+            <label className="grid gap-2 text-sm">
+              Duration (days)
+              <input
+                type="number"
+                min={1}
+                className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+                value={durationDays}
+                onChange={(event) => setDurationDays(Number(event.target.value))}
+              />
+            </label>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={allowSlip}
+              onChange={(event) => setAllowSlip(event.target.checked)}
+            />
+            Enable compassionate slip system
+          </label>
+
+          <button
+            type="button"
+            disabled={!isConnected || isPending}
+            onClick={createCommitment}
+            className="mt-2 rounded-lg bg-black px-4 py-2 text-white disabled:opacity-40 dark:bg-white dark:text-black"
           >
-            Documentation
-          </a>
+            {isPending ? "Submitting..." : "Create Commitment Stake"}
+          </button>
+
+          {status ? (
+            <p className="rounded-lg bg-zinc-100 px-3 py-2 text-sm dark:bg-zinc-800">
+              {status}
+            </p>
+          ) : null}
         </div>
-      </main>
-    </div>
+      </motion.section>
+    </main>
   );
 }
